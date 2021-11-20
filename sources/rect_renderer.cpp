@@ -63,14 +63,16 @@ static Array<VertexAttribute, 4> s_VertexAttributes = {
     VertexAttribute::Float32x1
 };
 
-void RectRenderer::BatchData::Begin(const Framebuffer * fb){
-    SX_CORE_ASSERT(TargetFramebuffer == nullptr, "RectRenderer: Batch should be ended");
-    SubmitedRectsCount = 0;
-    TargetFramebuffer = fb;
+RectRenderer::Batch::Batch(){
+    VerticesBuffer = Buffer::Create(sizeof(RectVertex) * MaxVerticesInBatch, BufferMemoryType::UncachedRAM, BufferUsageBits::TransferSource);
+    IndicesBuffer  = Buffer::Create(sizeof(u32)        * MaxIndicesInBatch,  BufferMemoryType::UncachedRAM, BufferUsageBits::TransferSource);
+    
+    Vertices = VerticesBuffer->Map<RectVertex>();
+    Indices  = IndicesBuffer->Map<u32>();
 }
 
-void RectRenderer::BatchData::End(){
-    TargetFramebuffer = nullptr;
+void RectRenderer::Batch::Reset(){
+    SubmitedRectsCount = 0;
 }
 
 RectRenderer::SemaphoreRing::SemaphoreRing(){
@@ -131,9 +133,6 @@ Result RectRenderer::Initialize(const RenderPass *rp){
     m_CmdPool = CommandPool::Create();
     m_CmdBuffer = m_CmdPool->Alloc();
 
-    m_CurrentBatch.Vertices = new RectVertex[MaxVerticesInBatch];
-    m_CurrentBatch.Indices  = new u32[MaxIndicesInBatch];
-
     m_SemaphoreRing.Construct();
     m_DrawingFence = new Fence;
 
@@ -154,9 +153,6 @@ void RectRenderer::Finalize(){
     delete m_VertexBuffer;
     delete m_IndexBuffer;
     delete m_MatricesUniformBuffer;
-
-    delete[] m_CurrentBatch.Vertices;
-    delete[] m_CurrentBatch.Indices;
 
     delete m_DrawingFence;
     m_SemaphoreRing.Destruct();
@@ -180,8 +176,11 @@ bool RectRenderer::IsInitialized()const{
 }
 
 Result RectRenderer::BeginDrawing(const Semaphore *wait_semaphore, const Framebuffer *framebuffer){
+    m_Framebuffer = framebuffer;
+
     m_SemaphoreRing->Begin(wait_semaphore);
-    m_CurrentBatch.Begin(framebuffer);
+    
+    m_BatcheRings.Current().Reset();
 
     m_MatricesUniform.u_Projection[0][0] = 2.f/framebuffer->Size().x;
     m_MatricesUniform.u_Projection[1][1] = 2.f/framebuffer->Size().y;
@@ -194,60 +193,66 @@ void RectRenderer::EndDrawing(const Semaphore *signal_semaphore){
     Flush(m_SemaphoreRing->Current(), signal_semaphore);
 
     m_SemaphoreRing->End();
-    m_CurrentBatch.End();
 }
 
 void RectRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *signal_semaphore){
     m_DrawingFence->WaitAndReset();
 
-    m_VertexBuffer->Copy(m_CurrentBatch.Vertices, sizeof(RectVertex) * 4 * m_CurrentBatch.SubmitedRectsCount);
-    m_IndexBuffer ->Copy(m_CurrentBatch.Indices,  sizeof(u32)        * 6 * m_CurrentBatch.SubmitedRectsCount);
+    Batch &batch = m_BatcheRings.Current();
+
+    //m_VertexBuffer->Copy(batch.Vertices, sizeof(RectVertex) * 4 * batch.SubmitedRectsCount);
+    //m_IndexBuffer ->Copy(batch.Indices,  sizeof(u32)        * 6 * batch.SubmitedRectsCount);
     m_MatricesUniformBuffer->Copy(&m_MatricesUniform, sizeof(m_MatricesUniform));
 
     m_CmdBuffer->Reset();
     m_CmdBuffer->Begin();
     {
-        Vector2u fb_size = m_CurrentBatch.TargetFramebuffer->Size();
+        Vector2u fb_size = m_Framebuffer->Size();
+        m_CmdBuffer->Copy(batch.VerticesBuffer, m_VertexBuffer, batch.SubmitedRectsCount * 4 * sizeof(RectVertex));
+        m_CmdBuffer->Copy(batch.IndicesBuffer, m_IndexBuffer, batch.SubmitedRectsCount * 6 * sizeof(u32));
         m_CmdBuffer->SetScissor(0, 0, fb_size.x, fb_size.y);
         m_CmdBuffer->SetViewport(0, 0, fb_size.x, fb_size.y);
         m_CmdBuffer->Bind(m_Pipeline);
         m_CmdBuffer->Bind(m_Set);
-        m_CmdBuffer->BeginRenderPass(m_FramebufferPass, m_CurrentBatch.TargetFramebuffer);
+        m_CmdBuffer->BeginRenderPass(m_FramebufferPass, m_Framebuffer);
             m_CmdBuffer->BindVertexBuffer(m_VertexBuffer);
             m_CmdBuffer->BindIndexBuffer(m_IndexBuffer, IndicesType::Uint32);
-            m_CmdBuffer->DrawIndexed(m_CurrentBatch.SubmitedRectsCount * 6);
+            m_CmdBuffer->DrawIndexed(batch.SubmitedRectsCount * 6);
         m_CmdBuffer->EndRenderPass();
     }
     m_CmdBuffer->End();
 
-    GPU::Execute(m_CmdBuffer, *wait_semaphore, *signal_semaphore, *m_DrawingFence);
-    
+    GPU::Execute(m_CmdBuffer, *wait_semaphore, *signal_semaphore, *m_DrawingFence);    
 
-    m_CurrentBatch.SubmitedRectsCount = 0;
+    batch.Reset();
+    m_BatcheRings.Advance();
 }
 
 void RectRenderer::DrawRect(Vector2s position, Vector2s size, Color color){
-    if(m_CurrentBatch.SubmitedRectsCount == MaxRectsInBatch){
+    Batch &batch = m_BatcheRings.Current();
+
+
+    if(batch.SubmitedRectsCount == MaxRectsInBatch){
         Flush(m_SemaphoreRing->Current(), m_SemaphoreRing->Next());
         m_SemaphoreRing->Advance();
     }
 
-    size_t base_vertex = m_CurrentBatch.SubmitedRectsCount * 4;
-    size_t base_index  = m_CurrentBatch.SubmitedRectsCount * 6;
+    size_t base_vertex = batch.SubmitedRectsCount * 4;
+    size_t base_index  = batch.SubmitedRectsCount * 6;
 
-    Vector2f offset = Vector2f(m_CurrentBatch.TargetFramebuffer->Size()/2u);
-    m_CurrentBatch.Vertices[base_vertex + 0] = {Vector2f(position.x,          position.y         ) - offset, Vector2f(0, 0), Vector3f(color.R, color.G, color.B), 0.f};
-    m_CurrentBatch.Vertices[base_vertex + 1] = {Vector2f(position.x + size.x, position.y         ) - offset, Vector2f(1, 0), Vector3f(color.R, color.G, color.B), 0.f};
-    m_CurrentBatch.Vertices[base_vertex + 2] = {Vector2f(position.x + size.x, position.y + size.y) - offset, Vector2f(1, 1), Vector3f(color.R, color.G, color.B), 0.f};
-    m_CurrentBatch.Vertices[base_vertex + 3] = {Vector2f(position.x,          position.y + size.y) - offset, Vector2f(0, 1), Vector3f(color.R, color.G, color.B), 0.f};
+    Vector2f offset = Vector2f(m_Framebuffer->Size()/2u);
+    batch.Vertices[base_vertex + 0] = {Vector2f(position.x,          position.y         ) - offset, Vector2f(0, 0), Vector3f(color.R, color.G, color.B), 0.f};
+    batch.Vertices[base_vertex + 1] = {Vector2f(position.x + size.x, position.y         ) - offset, Vector2f(1, 0), Vector3f(color.R, color.G, color.B), 0.f};
+    batch.Vertices[base_vertex + 2] = {Vector2f(position.x + size.x, position.y + size.y) - offset, Vector2f(1, 1), Vector3f(color.R, color.G, color.B), 0.f};
+    batch.Vertices[base_vertex + 3] = {Vector2f(position.x,          position.y + size.y) - offset, Vector2f(0, 1), Vector3f(color.R, color.G, color.B), 0.f};
 
-    m_CurrentBatch.Indices[base_index + 0] = m_CurrentBatch.SubmitedRectsCount * 4 + 0;
-    m_CurrentBatch.Indices[base_index + 1] = m_CurrentBatch.SubmitedRectsCount * 4 + 1;
-    m_CurrentBatch.Indices[base_index + 2] = m_CurrentBatch.SubmitedRectsCount * 4 + 2;
+    batch.Indices[base_index + 0] = batch.SubmitedRectsCount * 4 + 0;
+    batch.Indices[base_index + 1] = batch.SubmitedRectsCount * 4 + 1;
+    batch.Indices[base_index + 2] = batch.SubmitedRectsCount * 4 + 2;
 
-    m_CurrentBatch.Indices[base_index + 3] = m_CurrentBatch.SubmitedRectsCount * 4 + 2;
-    m_CurrentBatch.Indices[base_index + 4] = m_CurrentBatch.SubmitedRectsCount * 4 + 3;
-    m_CurrentBatch.Indices[base_index + 5] = m_CurrentBatch.SubmitedRectsCount * 4 + 0;
+    batch.Indices[base_index + 3] = batch.SubmitedRectsCount * 4 + 2;
+    batch.Indices[base_index + 4] = batch.SubmitedRectsCount * 4 + 3;
+    batch.Indices[base_index + 5] = batch.SubmitedRectsCount * 4 + 0;
 
-    m_CurrentBatch.SubmitedRectsCount++;
+    batch.SubmitedRectsCount++;
 }

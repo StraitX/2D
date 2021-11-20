@@ -9,6 +9,7 @@
 #include "core/fixed_list.hpp"
 #include "core/noncopyable.hpp"
 #include "core/raw_var.hpp"
+#include "core/ring.hpp"
 #include "graphics/color.hpp"
 #include "graphics/api/semaphore.hpp"
 
@@ -33,38 +34,13 @@ public:
         float    a_TexIndex;
     };
 
-    static constexpr size_t MaxRectsInBatch    = 20000;
+    static constexpr size_t MaxRectsInBatch    = 60000;
     static constexpr size_t MaxVerticesInBatch = MaxRectsInBatch * 4;
     static constexpr size_t MaxIndicesInBatch  = MaxRectsInBatch * 6;
 private:
     struct MatricesUniform{
         Matrix4f u_Projection{1.0f};
     };
-private:
-
-    //XXX: do something about allocation
-    const RenderPass *m_FramebufferPass = nullptr;
-    const DescriptorSetLayout *m_SetLayout = nullptr;
-    DescriptorSetPool         *m_SetPool   = nullptr;
-    DescriptorSet             *m_Set       = nullptr;
-
-    Array<const Shader *, 2> m_Shaders = {nullptr, nullptr};
-    GraphicsPipeline *m_Pipeline       = nullptr;
-
-    CommandPool   *m_CmdPool   = nullptr;
-    CommandBuffer *m_CmdBuffer = nullptr;
-
-    struct BatchData{
-        RectVertex *Vertices = nullptr;
-        u32        *Indices  = nullptr;    
-        size_t      SubmitedRectsCount = 0;   
-
-        const Framebuffer *TargetFramebuffer = nullptr; 
-
-        void Begin(const Framebuffer *fb);
-
-        void End();
-    }m_CurrentBatch;
 
     class SemaphoreRing{
     private:
@@ -85,6 +61,34 @@ private:
 
         u32 NextIndex();
     };
+
+    struct Batch{
+        Buffer *VerticesBuffer = nullptr;
+        Buffer *IndicesBuffer  = nullptr;
+        RectVertex *Vertices = nullptr;
+        u32        *Indices  = nullptr;
+        size_t      SubmitedRectsCount = 0;
+
+        Batch();
+
+        void Reset();
+    };
+private:
+
+    //XXX: do something about allocation
+    const RenderPass *m_FramebufferPass = nullptr;
+    const Framebuffer *m_Framebuffer = nullptr;
+    const DescriptorSetLayout *m_SetLayout = nullptr;
+    DescriptorSetPool         *m_SetPool   = nullptr;
+    DescriptorSet             *m_Set       = nullptr;
+
+    Array<const Shader *, 2> m_Shaders = {nullptr, nullptr};
+    GraphicsPipeline *m_Pipeline       = nullptr;
+
+    CommandPool   *m_CmdPool   = nullptr;
+    CommandBuffer *m_CmdBuffer = nullptr;
+
+    Ring<Batch, 2> m_BatcheRings;
 
     RawVar<SemaphoreRing> m_SemaphoreRing;
     
