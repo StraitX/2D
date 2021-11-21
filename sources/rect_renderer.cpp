@@ -46,14 +46,15 @@ layout(location = 2)in flat float v_TexIndex;
 
 layout(location = 0)out vec4 f_Color;
 
-//layout(binding = 1)uniform sampler2D u_Textures[15];
+layout(binding = 1)uniform sampler2D u_Textures[15];
 
 void main(){
-    f_Color = vec4(v_Color.rgb, 1.0);// * texture(u_Textures[int(v_TexIndex)], v_TexCoords);
+    f_Color = vec4(v_Color.rgb, 1.0) * texture(u_Textures[int(v_TexIndex)], v_TexCoords);
 })";
 
-static Array<ShaderBinding, 1> s_ShaderBindings = {
-    ShaderBinding(0, 1, ShaderBindingType::UniformBuffer, ShaderStageBits::Vertex)
+static Array<ShaderBinding, 2> s_ShaderBindings = {
+    ShaderBinding(0, 1,                              ShaderBindingType::UniformBuffer, ShaderStageBits::Vertex),
+    ShaderBinding(1, RectRenderer::MaxTexturesInSet, ShaderBindingType::Texture,       ShaderStageBits::Fragment),
 };
 
 static Array<VertexAttribute, 4> s_VertexAttributes = {
@@ -69,6 +70,11 @@ RectRenderer::Batch::Batch(){
     
     Vertices = VerticesBuffer->Map<RectVertex>();
     Indices  = IndicesBuffer->Map<u32>();
+}
+
+RectRenderer::Batch::~Batch(){
+    delete VerticesBuffer;
+    delete IndicesBuffer;
 }
 
 void RectRenderer::Batch::Reset(){
@@ -140,7 +146,11 @@ Result RectRenderer::Initialize(const RenderPass *rp){
     m_IndexBuffer  = Buffer::Create(sizeof(u32)        * MaxIndicesInBatch,  BufferMemoryType::DynamicVRAM, BufferUsageBits::IndexBuffer  | BufferUsageBits::TransferDestination);
     m_MatricesUniformBuffer = Buffer::Create(sizeof(MatricesUniform), BufferMemoryType::DynamicVRAM, BufferUsageBits::UniformBuffer | BufferUsageBits::TransferSource);
 
-    m_Set->UpdateUniformBinding(0, 0, m_MatricesUniformBuffer);
+
+    m_WhiteTexture = Texture2D::Create(1, 1, TextureFormat::RGBA8, TextureUsageBits::TransferDst | TextureUsageBits::Sampled, TextureLayout::ShaderReadOnlyOptimal);
+    m_WhiteTexture->Copy(Image(1, 1, Color::White));
+
+    m_DefaultSampler = Sampler::Create({});
 
     m_DrawingFence->Signal();
 
@@ -149,6 +159,9 @@ Result RectRenderer::Initialize(const RenderPass *rp){
 
 void RectRenderer::Finalize(){
     m_DrawingFence->WaitFor();
+
+    delete m_DefaultSampler;
+    delete m_WhiteTexture;
 
     delete m_VertexBuffer;
     delete m_IndexBuffer;
@@ -200,9 +213,11 @@ void RectRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *signa
 
     Batch &batch = m_BatcheRings.Current();
 
-    //m_VertexBuffer->Copy(batch.Vertices, sizeof(RectVertex) * 4 * batch.SubmitedRectsCount);
-    //m_IndexBuffer ->Copy(batch.Indices,  sizeof(u32)        * 6 * batch.SubmitedRectsCount);
     m_MatricesUniformBuffer->Copy(&m_MatricesUniform, sizeof(m_MatricesUniform));
+
+    m_Set->UpdateUniformBinding(0, 0, m_MatricesUniformBuffer);
+    for(size_t i = 0; i<batch.Textures.Size(); i++)
+        m_Set->UpdateTextureBinding(1, i, batch.Textures[i], m_DefaultSampler);
 
     m_CmdBuffer->Reset();
     m_CmdBuffer->Begin();
@@ -228,23 +243,30 @@ void RectRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *signa
     m_BatcheRings.Advance();
 }
 
-void RectRenderer::DrawRect(Vector2s position, Vector2s size, Color color){
-    Batch &batch = m_BatcheRings.Current();
-
-
-    if(batch.SubmitedRectsCount == MaxRectsInBatch){
+void RectRenderer::DrawRect(Vector2s position, Vector2s size, Color color, Texture2D *texture){
+    if(m_BatcheRings.Current().IsGeometryFull()
+    || !m_BatcheRings.Current().HasTexture(texture) && m_BatcheRings.Current().IsTexturesFull()){
         Flush(m_SemaphoreRing->Current(), m_SemaphoreRing->Next());
         m_SemaphoreRing->Advance();
     }
+
+    Batch &batch = m_BatcheRings.Current();
+
+    auto texture_it = batch.Textures.Find(texture);
+
+    if(texture_it == batch.Textures.end())
+        batch.Textures.Add(texture);// texture_it now points at newely inserted texture
+    
+    float texture_index = texture_it - batch.Textures.begin();
 
     size_t base_vertex = batch.SubmitedRectsCount * 4;
     size_t base_index  = batch.SubmitedRectsCount * 6;
 
     Vector2f offset = Vector2f(m_Framebuffer->Size()/2u);
-    batch.Vertices[base_vertex + 0] = {Vector2f(position.x,          position.y         ) - offset, Vector2f(0, 0), Vector3f(color.R, color.G, color.B), 0.f};
-    batch.Vertices[base_vertex + 1] = {Vector2f(position.x + size.x, position.y         ) - offset, Vector2f(1, 0), Vector3f(color.R, color.G, color.B), 0.f};
-    batch.Vertices[base_vertex + 2] = {Vector2f(position.x + size.x, position.y + size.y) - offset, Vector2f(1, 1), Vector3f(color.R, color.G, color.B), 0.f};
-    batch.Vertices[base_vertex + 3] = {Vector2f(position.x,          position.y + size.y) - offset, Vector2f(0, 1), Vector3f(color.R, color.G, color.B), 0.f};
+    batch.Vertices[base_vertex + 0] = {Vector2f(position.x,          position.y         ) - offset, Vector2f(0, 0), Vector3f(color.R, color.G, color.B), texture_index};
+    batch.Vertices[base_vertex + 1] = {Vector2f(position.x + size.x, position.y         ) - offset, Vector2f(1, 0), Vector3f(color.R, color.G, color.B), texture_index};
+    batch.Vertices[base_vertex + 2] = {Vector2f(position.x + size.x, position.y + size.y) - offset, Vector2f(1, 1), Vector3f(color.R, color.G, color.B), texture_index};
+    batch.Vertices[base_vertex + 3] = {Vector2f(position.x,          position.y + size.y) - offset, Vector2f(0, 1), Vector3f(color.R, color.G, color.B), texture_index};
 
     batch.Indices[base_index + 0] = batch.SubmitedRectsCount * 4 + 0;
     batch.Indices[base_index + 1] = batch.SubmitedRectsCount * 4 + 1;

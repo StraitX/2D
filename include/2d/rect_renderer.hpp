@@ -12,10 +12,8 @@
 #include "core/ring.hpp"
 #include "graphics/color.hpp"
 #include "graphics/api/semaphore.hpp"
+#include "graphics/api/descriptor_set.hpp"
 
-class DescriptorSetLayout;
-class DescriptorSet;
-class DescriptorSetPool;
 class RenderPass;
 class Framebuffer;
 class Shader;
@@ -24,6 +22,7 @@ class CommandPool;
 class CommandBuffer;
 class Fence;
 class Buffer;
+class Texture2D;
 
 class RectRenderer: public NonCopyable{
 public:
@@ -37,6 +36,7 @@ public:
     static constexpr size_t MaxRectsInBatch    = 60000;
     static constexpr size_t MaxVerticesInBatch = MaxRectsInBatch * 4;
     static constexpr size_t MaxIndicesInBatch  = MaxRectsInBatch * 6;
+    static constexpr size_t MaxTexturesInSet   = MaxTexturesBindings;
 private:
     struct MatricesUniform{
         Matrix4f u_Projection{1.0f};
@@ -68,10 +68,25 @@ private:
         RectVertex *Vertices = nullptr;
         u32        *Indices  = nullptr;
         size_t      SubmitedRectsCount = 0;
+        FixedList<Texture2D *, MaxTexturesInSet> Textures;
 
         Batch();
 
+        ~Batch();
+
         void Reset();
+
+        bool IsGeometryFull()const{
+            return SubmitedRectsCount == MaxRectsInBatch;
+        }
+
+        bool IsTexturesFull()const{
+            return Textures.Size() == Textures.Capacity();
+        }
+
+        bool HasTexture(Texture2D *texture){
+            return Textures.Find(texture) != Textures.end();
+        }
     };
 private:
 
@@ -99,6 +114,9 @@ private:
     Buffer *m_VertexBuffer = nullptr;
     Buffer *m_IndexBuffer  = nullptr;
     Buffer *m_MatricesUniformBuffer = nullptr;
+
+    Texture2D *m_WhiteTexture   = nullptr;
+    Sampler   *m_DefaultSampler = nullptr;
     
 public:
     Result Initialize(const RenderPass *rp);
@@ -111,7 +129,11 @@ public:
 
     void EndDrawing(const Semaphore *signal_semaphore);
 
-    void DrawRect(Vector2s position, Vector2s size, Color color);
+    void DrawRect(Vector2s position, Vector2s size, Color color, Texture2D *texture);
+
+    void DrawRect(Vector2s position, Vector2s size, Color color){
+        DrawRect(position, size, color, m_WhiteTexture);
+    }
 private:
     void Flush(const Semaphore *wait_semaphore, const Semaphore *signal_semaphore);
 };
