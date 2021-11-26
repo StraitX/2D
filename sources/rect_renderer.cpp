@@ -12,6 +12,12 @@
 #include "graphics/api/graphics_pipeline.hpp"
 #include "graphics/api/buffer.hpp"
 #include "graphics/api/descriptor_set.hpp"
+//XXX: temporary
+#include <cmath>
+
+constexpr float rad(float degree){
+    return degree / 180.f * 3.14159265358979323;
+}
 
 static const char *s_VertexShader = R"(
 #version 440 core
@@ -243,7 +249,7 @@ void RectRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *signa
     m_BatcheRings.Advance();
 }
 
-void RectRenderer::DrawRect(Vector2s position, Vector2s size, Color color, Texture2D *texture){
+void RectRenderer::DrawRect(Vector2s position, Vector2s size, Vector2s origin, float angle, Color color, Texture2D *texture){
     if(m_BatcheRings.Current().IsGeometryFull()
     || !m_BatcheRings.Current().HasTexture(texture) && m_BatcheRings.Current().IsTexturesFull()){
         Flush(m_SemaphoreRing->Current(), m_SemaphoreRing->Next());
@@ -263,10 +269,30 @@ void RectRenderer::DrawRect(Vector2s position, Vector2s size, Color color, Textu
     size_t base_index  = batch.SubmitedRectsCount * 6;
 
     Vector2f offset = Vector2f(m_Framebuffer->Size()/2u);
-    batch.Vertices[base_vertex + 0] = {Vector2f(position.x,          position.y         ) - offset, Vector2f(0, 0), Vector3f(color.R, color.G, color.B), texture_index};
-    batch.Vertices[base_vertex + 1] = {Vector2f(position.x + size.x, position.y         ) - offset, Vector2f(1, 0), Vector3f(color.R, color.G, color.B), texture_index};
-    batch.Vertices[base_vertex + 2] = {Vector2f(position.x + size.x, position.y + size.y) - offset, Vector2f(1, 1), Vector3f(color.R, color.G, color.B), texture_index};
-    batch.Vertices[base_vertex + 3] = {Vector2f(position.x,          position.y + size.y) - offset, Vector2f(0, 1), Vector3f(color.R, color.G, color.B), texture_index};
+    batch.Vertices[base_vertex + 0] = {Vector2f(0,      0         ), Vector2f(0, 0), Vector3f(color.R, color.G, color.B), texture_index};
+    batch.Vertices[base_vertex + 1] = {Vector2f(size.x, 0         ), Vector2f(1, 0), Vector3f(color.R, color.G, color.B), texture_index};
+    batch.Vertices[base_vertex + 2] = {Vector2f(size.x, 0 + size.y), Vector2f(1, 1), Vector3f(color.R, color.G, color.B), texture_index};
+    batch.Vertices[base_vertex + 3] = {Vector2f(0,      0 + size.y), Vector2f(0, 1), Vector3f(color.R, color.G, color.B), texture_index};
+
+    for(int i = 0; i<4; i++){
+        auto &vertex = batch.Vertices[base_vertex + i];
+
+        vertex.a_Position -= Vector2f(origin);
+        Vector4f v_position = Vector4f(vertex.a_Position.x, vertex.a_Position.y, 0, 1);
+
+        Matrix4f rotation(1.f);
+        rotation[0][0] = cos(rad(angle));
+        rotation[0][1] =-sin(rad(angle));
+        rotation[1][0] = sin(rad(angle));
+        rotation[1][1] = cos(rad(angle));
+
+        v_position = rotation * v_position;
+
+        vertex.a_Position.x = v_position.x;
+        vertex.a_Position.y = v_position.y;
+
+        vertex.a_Position += Vector2f(origin + position) - offset;
+    }
 
     batch.Indices[base_index + 0] = batch.SubmitedRectsCount * 4 + 0;
     batch.Indices[base_index + 1] = batch.SubmitedRectsCount * 4 + 1;

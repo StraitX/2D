@@ -129,10 +129,22 @@ public:
 
     void EndDrawing(const Semaphore *signal_semaphore);
 
-    void DrawRect(Vector2s position, Vector2s size, Color color, Texture2D *texture);
+    void DrawRect(Vector2s position, Vector2s size, Vector2s origin, float angle, Color color, Texture2D *texture);
+
+    void DrawRect(Vector2s position, Vector2s size, Vector2s origin, float angle, Color color){
+        DrawRect(position, size, origin, angle, color, m_WhiteTexture);
+    }
+
+    void DrawRect(Vector2s position, Vector2s size, float angle, Color color){
+        DrawRect(position, size, size/2, angle, color, m_WhiteTexture);
+    }
+
+    void DrawRect(Vector2s position, Vector2s size, Color color, Texture2D *texture){
+        DrawRect(position, size, {0, 0}, 0, color, texture);
+    }
 
     void DrawRect(Vector2s position, Vector2s size, Color color){
-        DrawRect(position, size, color, m_WhiteTexture);
+        DrawRect(position, size, {0, 0}, 0, color, m_WhiteTexture);
     }
 private:
     void Flush(const Semaphore *wait_semaphore, const Semaphore *signal_semaphore);
