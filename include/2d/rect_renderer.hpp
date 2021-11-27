@@ -148,6 +148,8 @@ public:
     }
 private:
     void Flush(const Semaphore *wait_semaphore, const Semaphore *signal_semaphore);
+
+    static void Rotate(Span<Vector2f> vertices, float degrees);
 };
 
 #endif//STRAITX-2D_RECT_RENDERER_HPP

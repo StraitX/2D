@@ -1,6 +1,8 @@
 #include "2d/rect_renderer.hpp"
 #include "core/string.hpp"
 #include "core/array.hpp"
+#include "core/math/trig.hpp"
+#include "core/math/linear.hpp"
 #include "graphics/api/graphics_api.hpp"
 #include "graphics/api/swapchain.hpp"
 #include "graphics/api/command_buffer.hpp"
@@ -12,12 +14,6 @@
 #include "graphics/api/graphics_pipeline.hpp"
 #include "graphics/api/buffer.hpp"
 #include "graphics/api/descriptor_set.hpp"
-//XXX: temporary
-#include <cmath>
-
-constexpr float rad(float degree){
-    return degree / 180.f * 3.14159265358979323;
-}
 
 static const char *s_VertexShader = R"(
 #version 440 core
@@ -268,31 +264,24 @@ void RectRenderer::DrawRect(Vector2s position, Vector2s size, Vector2s origin, f
     size_t base_vertex = batch.SubmitedRectsCount * 4;
     size_t base_index  = batch.SubmitedRectsCount * 6;
 
-    Vector2f offset = Vector2f(m_Framebuffer->Size()/2u);
-    batch.Vertices[base_vertex + 0] = {Vector2f(0,      0         ), Vector2f(0, 0), Vector3f(color.R, color.G, color.B), texture_index};
-    batch.Vertices[base_vertex + 1] = {Vector2f(size.x, 0         ), Vector2f(1, 0), Vector3f(color.R, color.G, color.B), texture_index};
-    batch.Vertices[base_vertex + 2] = {Vector2f(size.x, 0 + size.y), Vector2f(1, 1), Vector3f(color.R, color.G, color.B), texture_index};
-    batch.Vertices[base_vertex + 3] = {Vector2f(0,      0 + size.y), Vector2f(0, 1), Vector3f(color.R, color.G, color.B), texture_index};
+    Array<Vector2f, 4>rect_vertices = {
+        Vector2f(0,      0         ) - Vector2f(origin),
+        Vector2f(size.x, 0         ) - Vector2f(origin),
+        Vector2f(size.x, 0 + size.y) - Vector2f(origin),
+        Vector2f(0,      0 + size.y) - Vector2f(origin)
+    };
 
-    for(int i = 0; i<4; i++){
-        auto &vertex = batch.Vertices[base_vertex + i];
+    Rotate(rect_vertices, angle);
 
-        vertex.a_Position -= Vector2f(origin);
-        Vector4f v_position = Vector4f(vertex.a_Position.x, vertex.a_Position.y, 0, 1);
+    Vector2f offset = Vector2f(m_Framebuffer->Size()/2u) - Vector2f(position);
 
-        Matrix4f rotation(1.f);
-        rotation[0][0] = cos(rad(angle));
-        rotation[0][1] =-sin(rad(angle));
-        rotation[1][0] = sin(rad(angle));
-        rotation[1][1] = cos(rad(angle));
+    for(auto &vertex: rect_vertices)
+        vertex -= offset;
 
-        v_position = rotation * v_position;
-
-        vertex.a_Position.x = v_position.x;
-        vertex.a_Position.y = v_position.y;
-
-        vertex.a_Position += Vector2f(origin + position) - offset;
-    }
+    batch.Vertices[base_vertex + 0] = {rect_vertices[0], Vector2f(0, 0), Vector3f(color.R, color.G, color.B), texture_index};
+    batch.Vertices[base_vertex + 1] = {rect_vertices[1], Vector2f(1, 0), Vector3f(color.R, color.G, color.B), texture_index};
+    batch.Vertices[base_vertex + 2] = {rect_vertices[2], Vector2f(1, 1), Vector3f(color.R, color.G, color.B), texture_index};
+    batch.Vertices[base_vertex + 3] = {rect_vertices[3], Vector2f(0, 1), Vector3f(color.R, color.G, color.B), texture_index};
 
     batch.Indices[base_index + 0] = batch.SubmitedRectsCount * 4 + 0;
     batch.Indices[base_index + 1] = batch.SubmitedRectsCount * 4 + 1;
@@ -303,4 +292,21 @@ void RectRenderer::DrawRect(Vector2s position, Vector2s size, Vector2s origin, f
     batch.Indices[base_index + 5] = batch.SubmitedRectsCount * 4 + 0;
 
     batch.SubmitedRectsCount++;
+}
+
+void RectRenderer::Rotate(Span<Vector2f> vertices, float degrees){
+    float radians = Math::Rad(degrees);
+
+    Vector2f mat[2];
+    mat[0][0] = Math::Cos(radians);
+    mat[0][1] =-Math::Sin(radians);
+    mat[1][0] = Math::Sin(radians);
+    mat[1][1] = Math::Cos(radians);
+
+    for(auto &vertex: vertices){
+        vertex = Vector2f(
+            Dot(mat[0], vertex),
+            Dot(mat[1], vertex)
+        );
+    }
 }
