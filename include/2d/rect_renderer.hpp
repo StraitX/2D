@@ -12,7 +12,11 @@
 #include "core/ring.hpp"
 #include "graphics/color.hpp"
 #include "graphics/api/semaphore.hpp"
+#include "graphics/api/fence.hpp"
 #include "graphics/api/descriptor_set.hpp"
+
+#include "2d/common/semaphore_ring.hpp"
+#include "2d/common/viewport_parameters.hpp"
 
 class RenderPass;
 class Framebuffer;
@@ -33,13 +37,6 @@ public:
         float    a_TexIndex;
     };
 
-    struct ViewportParameters{
-        Vector2f Scale  = {1.f, 1.f};
-        Vector2f Offset = {0.f, 0.f};
-        Vector2f ViewportOffset = {0.f, 0.f};
-        Vector2f ViewportSize   = {0.f, 0.f};
-    };
-
     static constexpr size_t MaxRectsInBatch    = 60000;
     static constexpr size_t MaxVerticesInBatch = MaxRectsInBatch * 4;
     static constexpr size_t MaxIndicesInBatch  = MaxRectsInBatch * 6;
@@ -47,26 +44,6 @@ public:
 private:
     struct MatricesUniform{
         Matrix4f u_Projection{1.0f};
-    };
-
-    class SemaphoreRing{
-    private:
-        Semaphore LoopingPart[2] = {};
-        const Semaphore *FullRing[3] = {nullptr, nullptr, nullptr};
-        u32 Index = 0;
-    public:
-        SemaphoreRing();
-
-        void Begin(const Semaphore *first);
-
-        void End();
-
-        const Semaphore *Current();
-        const Semaphore *Next();
-
-        void Advance();
-
-        u32 NextIndex();
     };
 
     struct Batch{
@@ -112,12 +89,12 @@ private:
 
     Ring<Batch, 2> m_BatcheRings;
 
-    RawVar<SemaphoreRing> m_SemaphoreRing;
+    SemaphoreRing m_SemaphoreRing;
     
     MatricesUniform    m_MatricesUniform;
     ViewportParameters m_CurrentViewport;
 
-    Fence *m_DrawingFence = nullptr;
+    Fence m_DrawingFence;
 
     Buffer *m_VertexBuffer = nullptr;
     Buffer *m_IndexBuffer  = nullptr;
@@ -127,11 +104,9 @@ private:
     Sampler   *m_DefaultSampler = nullptr;
     
 public:
-    Result Initialize(const RenderPass *rp);
+    RectRenderer(const RenderPass *rp);
 
-    void Finalize();
-
-    bool IsInitialized()const;
+    ~RectRenderer();
 
     Result BeginDrawing(const Semaphore *wait_semaphore, const Framebuffer *framebuffer, const ViewportParameters &viewport);
 

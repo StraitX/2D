@@ -83,41 +83,7 @@ void RectRenderer::Batch::Reset(){
     SubmitedRectsCount = 0;
 }
 
-RectRenderer::SemaphoreRing::SemaphoreRing(){
-    FullRing[1] = &LoopingPart[0];
-    FullRing[2] = &LoopingPart[1];
-}
-
-void RectRenderer::SemaphoreRing::Begin(const Semaphore *first){
-    SX_CORE_ASSERT(FullRing[0] == nullptr, "RectRenderer: SemaphoreRing should be ended");
-    Index = 0;
-    FullRing[0] = first;
-}
-
-void RectRenderer::SemaphoreRing::End(){
-    FullRing[0] = nullptr;
-}
-
-const Semaphore *RectRenderer::SemaphoreRing::Current(){
-    return FullRing[Index];
-}
-
-const Semaphore *RectRenderer::SemaphoreRing::Next(){
-    return FullRing[NextIndex()];
-}
-
-void RectRenderer::SemaphoreRing::Advance(){
-    Index = NextIndex();
-}
-
-u32 RectRenderer::SemaphoreRing::NextIndex(){
-    u32 next_index = Index + 1;
-    if(next_index == 3)
-        next_index = 1;
-    return next_index;
-}
-
-Result RectRenderer::Initialize(const RenderPass *rp){
+RectRenderer::RectRenderer(const RenderPass *rp){
     m_FramebufferPass = rp;
 
     m_SetLayout = DescriptorSetLayout::Create(s_ShaderBindings);
@@ -141,9 +107,6 @@ Result RectRenderer::Initialize(const RenderPass *rp){
     m_CmdPool = CommandPool::Create();
     m_CmdBuffer = m_CmdPool->Alloc();
 
-    m_SemaphoreRing.Construct();
-    m_DrawingFence = new Fence;
-
     m_VertexBuffer = Buffer::Create(sizeof(RectVertex) * MaxVerticesInBatch, BufferMemoryType::DynamicVRAM, BufferUsageBits::VertexBuffer | BufferUsageBits::TransferDestination);
     m_IndexBuffer  = Buffer::Create(sizeof(u32)        * MaxIndicesInBatch,  BufferMemoryType::DynamicVRAM, BufferUsageBits::IndexBuffer  | BufferUsageBits::TransferDestination);
     m_MatricesUniformBuffer = Buffer::Create(sizeof(MatricesUniform), BufferMemoryType::DynamicVRAM, BufferUsageBits::UniformBuffer | BufferUsageBits::TransferSource);
@@ -154,13 +117,11 @@ Result RectRenderer::Initialize(const RenderPass *rp){
 
     m_DefaultSampler = Sampler::Create({});
 
-    m_DrawingFence->Signal();
-
-    return Result::Success;
+    m_DrawingFence.Signal();
 }
 
-void RectRenderer::Finalize(){
-    m_DrawingFence->WaitFor();
+RectRenderer::~RectRenderer(){
+    m_DrawingFence.WaitFor();
 
     delete m_DefaultSampler;
     delete m_WhiteTexture;
@@ -168,9 +129,6 @@ void RectRenderer::Finalize(){
     delete m_VertexBuffer;
     delete m_IndexBuffer;
     delete m_MatricesUniformBuffer;
-
-    delete m_DrawingFence;
-    m_SemaphoreRing.Destruct();
 
     m_CmdPool->Free(m_CmdBuffer);
     delete m_CmdPool;
@@ -185,16 +143,11 @@ void RectRenderer::Finalize(){
     delete m_SetLayout;
 }
 
-bool RectRenderer::IsInitialized()const{
-    // XXX: find a better way to validate renderer
-    return m_Pipeline != nullptr;
-}
-
 Result RectRenderer::BeginDrawing(const Semaphore *wait_semaphore, const Framebuffer *framebuffer, const ViewportParameters &viewport){
     m_Framebuffer = framebuffer;
     m_CurrentViewport = viewport;
 
-    m_SemaphoreRing->Begin(wait_semaphore);
+    m_SemaphoreRing.Begin(wait_semaphore);
     
     m_BatcheRings.Current().Reset();
 
@@ -213,13 +166,13 @@ Result RectRenderer::BeginDrawing(const Semaphore *wait_semaphore, const Framebu
 }
 
 void RectRenderer::EndDrawing(const Semaphore *signal_semaphore){
-    Flush(m_SemaphoreRing->Current(), signal_semaphore);
+    Flush(m_SemaphoreRing.Current(), signal_semaphore);
 
-    m_SemaphoreRing->End();
+    m_SemaphoreRing.End();
 }
 
 void RectRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *signal_semaphore){
-    m_DrawingFence->WaitAndReset();
+    m_DrawingFence.WaitAndReset();
 
     Batch &batch = m_BatcheRings.Current();
 
@@ -247,7 +200,7 @@ void RectRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *signa
     }
     m_CmdBuffer->End();
 
-    GPU::Execute(m_CmdBuffer, *wait_semaphore, *signal_semaphore, *m_DrawingFence);    
+    GPU::Execute(m_CmdBuffer, *wait_semaphore, *signal_semaphore, m_DrawingFence);    
 
     batch.Reset();
     m_BatcheRings.Advance();
@@ -256,8 +209,8 @@ void RectRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *signa
 void RectRenderer::DrawRect(Vector2s position, Vector2s size, Vector2s origin, float angle, Color color, Texture2D *texture){
     if(m_BatcheRings.Current().IsGeometryFull()
     || !m_BatcheRings.Current().HasTexture(texture) && m_BatcheRings.Current().IsTexturesFull()){
-        Flush(m_SemaphoreRing->Current(), m_SemaphoreRing->Next());
-        m_SemaphoreRing->Advance();
+        Flush(m_SemaphoreRing.Current(), m_SemaphoreRing.Next());
+        m_SemaphoreRing.Advance();
     }
 
     Batch &batch = m_BatcheRings.Current();
