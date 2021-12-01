@@ -33,6 +33,13 @@ public:
         float    a_TexIndex;
     };
 
+    struct ViewportParameters{
+        Vector2f Scale  = {1.f, 1.f};
+        Vector2f Offset = {0.f, 0.f};
+        Vector2f ViewportOffset = {0.f, 0.f};
+        Vector2f ViewportSize   = {0.f, 0.f};
+    };
+
     static constexpr size_t MaxRectsInBatch    = 60000;
     static constexpr size_t MaxVerticesInBatch = MaxRectsInBatch * 4;
     static constexpr size_t MaxIndicesInBatch  = MaxRectsInBatch * 6;
@@ -107,7 +114,8 @@ private:
 
     RawVar<SemaphoreRing> m_SemaphoreRing;
     
-    MatricesUniform m_MatricesUniform;
+    MatricesUniform    m_MatricesUniform;
+    ViewportParameters m_CurrentViewport;
 
     Fence *m_DrawingFence = nullptr;
 
@@ -124,6 +132,8 @@ public:
     void Finalize();
 
     bool IsInitialized()const;
+
+    Result BeginDrawing(const Semaphore *wait_semaphore, const Framebuffer *framebuffer, const ViewportParameters &viewport);
 
     Result BeginDrawing(const Semaphore *wait_semaphore, const Framebuffer *framebuffer);
 

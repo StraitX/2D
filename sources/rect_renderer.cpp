@@ -190,8 +190,9 @@ bool RectRenderer::IsInitialized()const{
     return m_Pipeline != nullptr;
 }
 
-Result RectRenderer::BeginDrawing(const Semaphore *wait_semaphore, const Framebuffer *framebuffer){
+Result RectRenderer::BeginDrawing(const Semaphore *wait_semaphore, const Framebuffer *framebuffer, const ViewportParameters &viewport){
     m_Framebuffer = framebuffer;
+    m_CurrentViewport = viewport;
 
     m_SemaphoreRing->Begin(wait_semaphore);
     
@@ -202,6 +203,13 @@ Result RectRenderer::BeginDrawing(const Semaphore *wait_semaphore, const Framebu
 
     //XXX Check if framebuffer matches RenderPass
     return Result::Success;
+}
+
+Result RectRenderer::BeginDrawing(const Semaphore *wait_semaphore, const Framebuffer *framebuffer){
+    ViewportParameters default_params;
+    default_params.ViewportOffset = {0.f, 0.f};
+    default_params.ViewportSize = Vector2f(framebuffer->Size());
+    return BeginDrawing(wait_semaphore, framebuffer, default_params);
 }
 
 void RectRenderer::EndDrawing(const Semaphore *signal_semaphore){
@@ -227,8 +235,8 @@ void RectRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *signa
         Vector2u fb_size = m_Framebuffer->Size();
         m_CmdBuffer->Copy(batch.VerticesBuffer, m_VertexBuffer, batch.SubmitedRectsCount * 4 * sizeof(RectVertex));
         m_CmdBuffer->Copy(batch.IndicesBuffer, m_IndexBuffer, batch.SubmitedRectsCount * 6 * sizeof(u32));
-        m_CmdBuffer->SetScissor(0, 0, fb_size.x, fb_size.y);
-        m_CmdBuffer->SetViewport(0, 0, fb_size.x, fb_size.y);
+        m_CmdBuffer->SetScissor (m_CurrentViewport.ViewportOffset.x, m_CurrentViewport.ViewportOffset.y, m_CurrentViewport.ViewportSize.x, m_CurrentViewport.ViewportSize.y);
+        m_CmdBuffer->SetViewport(m_CurrentViewport.ViewportOffset.x, m_CurrentViewport.ViewportOffset.y, m_CurrentViewport.ViewportSize.x, m_CurrentViewport.ViewportSize.y);
         m_CmdBuffer->Bind(m_Pipeline);
         m_CmdBuffer->Bind(m_Set);
         m_CmdBuffer->BeginRenderPass(m_FramebufferPass, m_Framebuffer);
@@ -273,10 +281,13 @@ void RectRenderer::DrawRect(Vector2s position, Vector2s size, Vector2s origin, f
 
     Rotate(rect_vertices, angle);
 
-    Vector2f offset = Vector2f(m_Framebuffer->Size()/2u) - Vector2f(position);
+    Vector2f offset = Vector2f(m_Framebuffer->Size()/2u) - m_CurrentViewport.Offset;
 
-    for(auto &vertex: rect_vertices)
+    for(auto &vertex: rect_vertices){
+        vertex += Vector2f(position);
+        vertex *= m_CurrentViewport.Scale;
         vertex -= offset;
+    }
 
     batch.Vertices[base_vertex + 0] = {rect_vertices[0], Vector2f(0, 0), Vector3f(color.R, color.G, color.B), texture_index};
     batch.Vertices[base_vertex + 1] = {rect_vertices[1], Vector2f(1, 0), Vector3f(color.R, color.G, color.B), texture_index};
