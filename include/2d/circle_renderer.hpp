@@ -102,6 +102,8 @@ public:
     void EndDrawing(const Semaphore *signal_semaphore);
 
     void DrawCircle(Vector2s center, float radius, Color color);
+
+    void Flush();
 private:
     void Flush(const Semaphore *wait_semaphore, const Semaphore *signal_semaphore);
 };

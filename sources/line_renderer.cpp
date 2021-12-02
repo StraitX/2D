@@ -146,6 +146,32 @@ void LineRenderer::EndDrawing(const Semaphore *signal_semaphore){
     m_SemaphoreRing.End();
 }
 
+void LineRenderer::DrawLines(ConstSpan<Vector2s> points, Color color, u32 width){
+    if(m_BatchRing.Current().IsGeometryFull()
+       || m_BatchRing.Current().LineWidth != InvalidLineWidth && m_BatchRing.Current().LineWidth != width){
+        Flush();
+    }
+    Batch &batch = m_BatchRing.Current();
+
+    batch.LineWidth = width;
+
+    Vector2f offset = Vector2f(m_Framebuffer->Size()/2u) - m_CurrentViewport.Offset;
+
+    for(const Vector2s &point: points){
+        LineVertex vertex;
+        vertex.a_Position = (Vector2f(point) - offset) * m_CurrentViewport.Scale;
+        vertex.a_Color = Vector3f(color.R, color.G, color.B);
+
+        batch.Vertices[batch.SubmitedVerticesCount] = vertex;
+        batch.Indices[batch.SubmitedIndicesCount] = (u32)batch.SubmitedVerticesCount;
+
+        batch.SubmitedVerticesCount++;
+        batch.SubmitedIndicesCount++;
+    }
+
+    batch.Indices[batch.SubmitedIndicesCount++] = 0xFFFFFFFF;
+}
+
 void LineRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *signal_semaphore){
     m_DrawingFence.WaitAndReset();
 
@@ -180,29 +206,7 @@ void LineRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *signa
     m_BatchRing.Advance();
 }
 
-void LineRenderer::DrawLines(ConstSpan<Vector2s> points, Color color, u32 width){
-    if(m_BatchRing.Current().IsGeometryFull()
-    || m_BatchRing.Current().LineWidth != InvalidLineWidth && m_BatchRing.Current().LineWidth != width){
-        Flush(m_SemaphoreRing.Current(), m_SemaphoreRing.Next());
-        m_SemaphoreRing.Advance();
-    }
-    Batch &batch = m_BatchRing.Current();
-
-    batch.LineWidth = width;
-
-    Vector2f offset = Vector2f(m_Framebuffer->Size()/2u) - m_CurrentViewport.Offset;
-
-    for(const Vector2s &point: points){
-        LineVertex vertex;
-        vertex.a_Position = (Vector2f(point) - offset) * m_CurrentViewport.Scale;
-        vertex.a_Color = Vector3f(color.R, color.G, color.B);
-
-        batch.Vertices[batch.SubmitedVerticesCount] = vertex;
-        batch.Indices[batch.SubmitedIndicesCount] = (u32)batch.SubmitedVerticesCount;
-
-        batch.SubmitedVerticesCount++;
-        batch.SubmitedIndicesCount++;
-    }
-
-    batch.Indices[batch.SubmitedIndicesCount++] = 0xFFFFFFFF;
+void LineRenderer::Flush() {
+    Flush(m_SemaphoreRing.Current(), m_SemaphoreRing.Next());
+    m_SemaphoreRing.Advance();
 }

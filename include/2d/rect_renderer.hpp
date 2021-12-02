@@ -131,6 +131,8 @@ public:
     void DrawRect(Vector2s position, Vector2s size, Color color){
         DrawRect(position, size, {0, 0}, 0, color, m_WhiteTexture);
     }
+
+    void Flush();
 private:
     void Flush(const Semaphore *wait_semaphore, const Semaphore *signal_semaphore);
 

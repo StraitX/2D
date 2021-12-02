@@ -164,46 +164,10 @@ void RectRenderer::EndDrawing(const Semaphore *signal_semaphore){
     m_SemaphoreRing.End();
 }
 
-void RectRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *signal_semaphore){
-    m_DrawingFence.WaitAndReset();
-
-    Batch &batch = m_BatcheRings.Current();
-
-    m_MatricesUniformBuffer->Copy(&m_MatricesUniform, sizeof(m_MatricesUniform));
-
-    m_Set->UpdateUniformBinding(0, 0, m_MatricesUniformBuffer);
-    for(size_t i = 0; i<batch.Textures.Size(); i++)
-        m_Set->UpdateTextureBinding(1, i, batch.Textures[i], m_DefaultSampler);
-
-    m_CmdBuffer->Reset();
-    m_CmdBuffer->Begin();
-    {
-        Vector2u fb_size = m_Framebuffer->Size();
-        m_CmdBuffer->Copy(batch.VerticesBuffer, m_VertexBuffer, batch.SubmitedRectsCount * 4 * sizeof(RectVertex));
-        m_CmdBuffer->Copy(batch.IndicesBuffer, m_IndexBuffer, batch.SubmitedRectsCount * 6 * sizeof(u32));
-        m_CmdBuffer->SetScissor (m_CurrentViewport.ViewportOffset.x, m_CurrentViewport.ViewportOffset.y, m_CurrentViewport.ViewportSize.x, m_CurrentViewport.ViewportSize.y);
-        m_CmdBuffer->SetViewport(m_CurrentViewport.ViewportOffset.x, m_CurrentViewport.ViewportOffset.y, m_CurrentViewport.ViewportSize.x, m_CurrentViewport.ViewportSize.y);
-        m_CmdBuffer->Bind(m_Pipeline);
-        m_CmdBuffer->Bind(m_Set);
-        m_CmdBuffer->BeginRenderPass(m_FramebufferPass, m_Framebuffer);
-            m_CmdBuffer->BindVertexBuffer(m_VertexBuffer);
-            m_CmdBuffer->BindIndexBuffer(m_IndexBuffer, IndicesType::Uint32);
-            m_CmdBuffer->DrawIndexed(batch.SubmitedRectsCount * 6);
-        m_CmdBuffer->EndRenderPass();
-    }
-    m_CmdBuffer->End();
-
-    GPU::Execute(m_CmdBuffer, *wait_semaphore, *signal_semaphore, m_DrawingFence);    
-
-    batch.Reset();
-    m_BatcheRings.Advance();
-}
-
 void RectRenderer::DrawRect(Vector2s position, Vector2s size, Vector2s origin, float angle, Color color, Texture2D *texture){
     if(m_BatcheRings.Current().IsGeometryFull()
     || !m_BatcheRings.Current().HasTexture(texture) && m_BatcheRings.Current().IsTexturesFull()){
-        Flush(m_SemaphoreRing.Current(), m_SemaphoreRing.Next());
-        m_SemaphoreRing.Advance();
+        Flush();
     }
 
     Batch &batch = m_BatcheRings.Current();
@@ -249,6 +213,45 @@ void RectRenderer::DrawRect(Vector2s position, Vector2s size, Vector2s origin, f
     batch.Indices[base_index + 5] = batch.SubmitedRectsCount * 4 + 0;
 
     batch.SubmitedRectsCount++;
+}
+void RectRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *signal_semaphore){
+    m_DrawingFence.WaitAndReset();
+
+    Batch &batch = m_BatcheRings.Current();
+
+    m_MatricesUniformBuffer->Copy(&m_MatricesUniform, sizeof(m_MatricesUniform));
+
+    m_Set->UpdateUniformBinding(0, 0, m_MatricesUniformBuffer);
+    for(size_t i = 0; i<batch.Textures.Size(); i++)
+        m_Set->UpdateTextureBinding(1, i, batch.Textures[i], m_DefaultSampler);
+
+    m_CmdBuffer->Reset();
+    m_CmdBuffer->Begin();
+    {
+        Vector2u fb_size = m_Framebuffer->Size();
+        m_CmdBuffer->Copy(batch.VerticesBuffer, m_VertexBuffer, batch.SubmitedRectsCount * 4 * sizeof(RectVertex));
+        m_CmdBuffer->Copy(batch.IndicesBuffer, m_IndexBuffer, batch.SubmitedRectsCount * 6 * sizeof(u32));
+        m_CmdBuffer->SetScissor (m_CurrentViewport.ViewportOffset.x, m_CurrentViewport.ViewportOffset.y, m_CurrentViewport.ViewportSize.x, m_CurrentViewport.ViewportSize.y);
+        m_CmdBuffer->SetViewport(m_CurrentViewport.ViewportOffset.x, m_CurrentViewport.ViewportOffset.y, m_CurrentViewport.ViewportSize.x, m_CurrentViewport.ViewportSize.y);
+        m_CmdBuffer->Bind(m_Pipeline);
+        m_CmdBuffer->Bind(m_Set);
+        m_CmdBuffer->BeginRenderPass(m_FramebufferPass, m_Framebuffer);
+        m_CmdBuffer->BindVertexBuffer(m_VertexBuffer);
+        m_CmdBuffer->BindIndexBuffer(m_IndexBuffer, IndicesType::Uint32);
+        m_CmdBuffer->DrawIndexed(batch.SubmitedRectsCount * 6);
+        m_CmdBuffer->EndRenderPass();
+    }
+    m_CmdBuffer->End();
+
+    GPU::Execute(m_CmdBuffer, *wait_semaphore, *signal_semaphore, m_DrawingFence);
+
+    batch.Reset();
+    m_BatcheRings.Advance();
+}
+
+void RectRenderer::Flush() {
+    Flush(m_SemaphoreRing.Current(), m_SemaphoreRing.Next());
+    m_SemaphoreRing.Advance();
 }
 
 void RectRenderer::Rotate(Span<Vector2f> vertices, float degrees){

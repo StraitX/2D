@@ -160,6 +160,46 @@ void CircleRenderer::EndDrawing(const Semaphore *signal_semaphore){
     m_SemaphoreRing.End();
 }
 
+
+void CircleRenderer::DrawCircle(Vector2s center, float radius, Color color){
+    if(m_BatcheRings.Current().IsGeometryFull())
+        Flush();
+
+    Batch &batch = m_BatcheRings.Current();
+
+    size_t base_vertex = batch.SubmitedCirclesCount * 4;
+    size_t base_index  = batch.SubmitedCirclesCount * 6;
+
+    Array<Vector2f, 4> vertices = {
+            Vector2f(center) + Vector2f(-radius,-radius),
+            Vector2f(center) + Vector2f( radius,-radius),
+            Vector2f(center) + Vector2f( radius, radius),
+            Vector2f(center) + Vector2f(-radius, radius)
+    };
+
+    Vector2f offset = Vector2f(m_Framebuffer->Size()/2u) - m_CurrentViewport.Offset;
+
+    for(auto &vertex: vertices){
+        vertex *= m_CurrentViewport.Scale;
+        vertex -= offset;
+    }
+
+    batch.Vertices[base_vertex + 0] = {vertices[0], Vector2f(-radius,-radius), Vector3f(color.R, color.G, color.B), radius};
+    batch.Vertices[base_vertex + 1] = {vertices[1], Vector2f( radius,-radius), Vector3f(color.R, color.G, color.B), radius};
+    batch.Vertices[base_vertex + 2] = {vertices[2], Vector2f( radius, radius), Vector3f(color.R, color.G, color.B), radius};
+    batch.Vertices[base_vertex + 3] = {vertices[3], Vector2f(-radius, radius), Vector3f(color.R, color.G, color.B), radius};
+
+    batch.Indices[base_index + 0] = batch.SubmitedCirclesCount * 4 + 0;
+    batch.Indices[base_index + 1] = batch.SubmitedCirclesCount * 4 + 1;
+    batch.Indices[base_index + 2] = batch.SubmitedCirclesCount * 4 + 2;
+
+    batch.Indices[base_index + 3] = batch.SubmitedCirclesCount * 4 + 2;
+    batch.Indices[base_index + 4] = batch.SubmitedCirclesCount * 4 + 3;
+    batch.Indices[base_index + 5] = batch.SubmitedCirclesCount * 4 + 0;
+
+    batch.SubmitedCirclesCount++;
+}
+
 void CircleRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *signal_semaphore){
     m_DrawingFence.WaitAndReset();
 
@@ -190,43 +230,7 @@ void CircleRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *sig
     m_BatcheRings.Advance();
 }
 
-void CircleRenderer::DrawCircle(Vector2s center, float radius, Color color){
-    if(m_BatcheRings.Current().IsGeometryFull()){
-        Flush(m_SemaphoreRing.Current(), m_SemaphoreRing.Next());
-        m_SemaphoreRing.Advance();
-    }
-
-    Batch &batch = m_BatcheRings.Current();
-
-    size_t base_vertex = batch.SubmitedCirclesCount * 4;
-    size_t base_index  = batch.SubmitedCirclesCount * 6;
-
-    Array<Vector2f, 4> vertices = {
-        Vector2f(center) + Vector2f(-radius,-radius),
-        Vector2f(center) + Vector2f( radius,-radius),
-        Vector2f(center) + Vector2f( radius, radius),
-        Vector2f(center) + Vector2f(-radius, radius)
-    };
-
-    Vector2f offset = Vector2f(m_Framebuffer->Size()/2u) - m_CurrentViewport.Offset;
-
-    for(auto &vertex: vertices){
-        vertex *= m_CurrentViewport.Scale;
-        vertex -= offset;
-    }
-
-    batch.Vertices[base_vertex + 0] = {vertices[0], Vector2f(-radius,-radius), Vector3f(color.R, color.G, color.B), radius};
-    batch.Vertices[base_vertex + 1] = {vertices[1], Vector2f( radius,-radius), Vector3f(color.R, color.G, color.B), radius};
-    batch.Vertices[base_vertex + 2] = {vertices[2], Vector2f( radius, radius), Vector3f(color.R, color.G, color.B), radius};
-    batch.Vertices[base_vertex + 3] = {vertices[3], Vector2f(-radius, radius), Vector3f(color.R, color.G, color.B), radius};
-
-    batch.Indices[base_index + 0] = batch.SubmitedCirclesCount * 4 + 0;
-    batch.Indices[base_index + 1] = batch.SubmitedCirclesCount * 4 + 1;
-    batch.Indices[base_index + 2] = batch.SubmitedCirclesCount * 4 + 2;
-
-    batch.Indices[base_index + 3] = batch.SubmitedCirclesCount * 4 + 2;
-    batch.Indices[base_index + 4] = batch.SubmitedCirclesCount * 4 + 3;
-    batch.Indices[base_index + 5] = batch.SubmitedCirclesCount * 4 + 0;
-
-    batch.SubmitedCirclesCount++;
+void CircleRenderer::Flush() {
+    Flush(m_SemaphoreRing.Current(), m_SemaphoreRing.Next());
+    m_SemaphoreRing.Advance();
 }

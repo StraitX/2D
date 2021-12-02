@@ -106,6 +106,7 @@ public:
         Vector2s points[2] = {first, last};
         DrawLines({points, lengthof(points)}, color, width);
     }
+    void Flush();
 private:
     void Flush(const Semaphore *wait_semaphore, const Semaphore *signal_semaphore);
 };
