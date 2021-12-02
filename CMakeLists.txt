@@ -11,6 +11,7 @@ set(SX_2D_THIRDPARTY_DIR ${PROJECT_SOURCE_DIR}/thirdparty)
 set(SX_2D_SOURCES
     ${SX_2D_SOURCES_DIR}/rect_renderer.cpp
     ${SX_2D_SOURCES_DIR}/circle_renderer.cpp
+    ${SX_2D_SOURCES_DIR}/line_renderer.cpp
     ${SX_2D_SOURCES_DIR}/common/semaphore_ring.cpp
 )
 
