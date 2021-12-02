@@ -1,19 +1,12 @@
 #include "2d/rect_renderer.hpp"
 #include "core/string.hpp"
-#include "core/array.hpp"
 #include "core/math/trig.hpp"
 #include "core/math/linear.hpp"
-#include "graphics/api/graphics_api.hpp"
-#include "graphics/api/swapchain.hpp"
 #include "graphics/api/command_buffer.hpp"
-#include "graphics/api/semaphore.hpp"
 #include "graphics/api/gpu.hpp"
 #include "graphics/api/render_pass.hpp"
 #include "graphics/api/framebuffer.hpp"
-#include "graphics/api/shader.hpp"
 #include "graphics/api/graphics_pipeline.hpp"
-#include "graphics/api/buffer.hpp"
-#include "graphics/api/descriptor_set.hpp"
 
 static const char *s_VertexShader = R"(
 #version 440 core
