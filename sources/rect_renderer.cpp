@@ -76,6 +76,13 @@ void RectRenderer::Batch::Reset(){
     SubmitedRectsCount = 0;
 }
 
+const Array<Vector2f, 4> RectRenderer::s_DefaultTextureCoordinates = {
+    Vector2f(0.f, 0.f),
+    Vector2f(1.f, 0.f),
+    Vector2f(1.f, 1.f),
+    Vector2f(0.f, 1.f)
+};                 
+
 RectRenderer::RectRenderer(const RenderPass *rp){
     m_FramebufferPass = rp;
 
@@ -164,7 +171,7 @@ void RectRenderer::EndDrawing(const Semaphore *signal_semaphore){
     m_SemaphoreRing.End();
 }
 
-void RectRenderer::DrawRect(Vector2s position, Vector2s size, Vector2s origin, float angle, Color color, Texture2D *texture){
+void RectRenderer::DrawRect(Vector2s position, Vector2s size, Vector2s origin, float angle, Color color, Texture2D *texture, const Array<Vector2f, 4> &texture_coords){
     if(m_BatcheRings.Current().IsGeometryFull()
     || !m_BatcheRings.Current().HasTexture(texture) && m_BatcheRings.Current().IsTexturesFull()){
         Flush();
@@ -199,10 +206,10 @@ void RectRenderer::DrawRect(Vector2s position, Vector2s size, Vector2s origin, f
         vertex -= offset;
     }
 
-    batch.Vertices[base_vertex + 0] = {rect_vertices[0], Vector2f(0, 0), Vector3f(color.R, color.G, color.B), texture_index};
-    batch.Vertices[base_vertex + 1] = {rect_vertices[1], Vector2f(1, 0), Vector3f(color.R, color.G, color.B), texture_index};
-    batch.Vertices[base_vertex + 2] = {rect_vertices[2], Vector2f(1, 1), Vector3f(color.R, color.G, color.B), texture_index};
-    batch.Vertices[base_vertex + 3] = {rect_vertices[3], Vector2f(0, 1), Vector3f(color.R, color.G, color.B), texture_index};
+    batch.Vertices[base_vertex + 0] = {rect_vertices[0], texture_coords[0], Vector3f(color.R, color.G, color.B), texture_index};
+    batch.Vertices[base_vertex + 1] = {rect_vertices[1], texture_coords[1], Vector3f(color.R, color.G, color.B), texture_index};
+    batch.Vertices[base_vertex + 2] = {rect_vertices[2], texture_coords[2], Vector3f(color.R, color.G, color.B), texture_index};
+    batch.Vertices[base_vertex + 3] = {rect_vertices[3], texture_coords[3], Vector3f(color.R, color.G, color.B), texture_index};
 
     batch.Indices[base_index + 0] = batch.SubmitedRectsCount * 4 + 0;
     batch.Indices[base_index + 1] = batch.SubmitedRectsCount * 4 + 1;

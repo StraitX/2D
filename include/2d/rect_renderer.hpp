@@ -72,6 +72,9 @@ private:
             return Textures.Find(texture) != Textures.end();
         }
     };
+
+public:
+    static const Array<Vector2f, 4> s_DefaultTextureCoordinates;
 private:
 
     //XXX: do something about allocation
@@ -114,7 +117,7 @@ public:
 
     void EndDrawing(const Semaphore *signal_semaphore);
 
-    void DrawRect(Vector2s position, Vector2s size, Vector2s origin, float angle, Color color, Texture2D *texture);
+    void DrawRect(Vector2s position, Vector2s size, Vector2s origin, float angle, Color color, Texture2D *texture, const Array<Vector2f, 4> &texture_coords = s_DefaultTextureCoordinates);
 
     void DrawRect(Vector2s position, Vector2s size, Vector2s origin, float angle, Color color){
         DrawRect(position, size, origin, angle, color, m_WhiteTexture);
