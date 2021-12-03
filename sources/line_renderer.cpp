@@ -10,9 +10,9 @@ static const char *s_VertexShader = R"(
 #version 440 core
 
 layout(location = 0)in vec2 a_Position;
-layout(location = 1)in vec3 a_Color;
+layout(location = 1)in vec4 a_Color;
 
-layout(location = 0)out vec3 v_Color;
+layout(location = 0)out vec4 v_Color;
 
 layout(std140, binding = 0)uniform MatricesUniform{
     mat4 u_Projection;
@@ -27,12 +27,12 @@ void main(){
 static const char *s_FragmentShader = R"(
 #version 440 core
 
-layout(location = 0)in vec3 v_Color;
+layout(location = 0)in vec4 v_Color;
 
 layout(location = 0)out vec4 f_Color;
 
 void main(){
-    f_Color = vec4(v_Color.rgb, 1.0);
+    f_Color = v_Color;
 })";
 
 static Array<ShaderBinding, 1> s_ShaderBindings = {

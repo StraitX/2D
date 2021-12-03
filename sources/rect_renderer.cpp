@@ -13,10 +13,10 @@ static const char *s_VertexShader = R"(
 
 layout(location = 0)in vec2 a_Position;
 layout(location = 1)in vec2 a_TexCoords;
-layout(location = 2)in vec3 a_Color;
+layout(location = 2)in vec4 a_Color;
 layout(location = 3)in float a_TexIndex;
 
-layout(location = 0)out vec3 v_Color;
+layout(location = 0)out vec4 v_Color;
 layout(location = 1)out vec2 v_TexCoords;
 layout(location = 2)out flat float v_TexIndex;
 
@@ -35,7 +35,7 @@ void main(){
 static const char *s_FragmentShader = R"(
 #version 440 core
 
-layout(location = 0)in vec3 v_Color;
+layout(location = 0)in vec4 v_Color;
 layout(location = 1)in vec2 v_TexCoords;
 layout(location = 2)in flat float v_TexIndex;
 
@@ -44,7 +44,7 @@ layout(location = 0)out vec4 f_Color;
 layout(binding = 1)uniform sampler2D u_Textures[15];
 
 void main(){
-    f_Color = vec4(v_Color.rgb, 1.0) * texture(u_Textures[int(v_TexIndex)], v_TexCoords);
+    f_Color = v_Color * texture(u_Textures[int(v_TexIndex)], v_TexCoords);
 })";
 
 static Array<ShaderBinding, 2> s_ShaderBindings = {

@@ -13,10 +13,10 @@ static const char *s_VertexShader = R"(
 
 layout(location = 0)in vec2 a_Position;
 layout(location = 1)in vec2 a_Center;
-layout(location = 2)in vec3 a_Color;
+layout(location = 2)in vec4 a_Color;
 layout(location = 3)in float a_Radius;
 
-layout(location = 0)out vec3 v_Color;
+layout(location = 0)out vec4 v_Color;
 layout(location = 1)out vec2 v_Position;
 layout(location = 2)out vec2 v_Center;
 layout(location = 3)out flat float v_Radius;
@@ -37,7 +37,7 @@ void main(){
 static const char *s_FragmentShader = R"(
 #version 440 core
 
-layout(location = 0)in vec3 v_Color;
+layout(location = 0)in vec4 v_Color;
 layout(location = 1)in vec2 v_Position;
 layout(location = 2)in vec2 v_Center;
 layout(location = 3)in flat float v_Radius;
@@ -48,7 +48,7 @@ void main(){
 
     if(length(v_Center) > v_Radius)
         discard;
-    f_Color = vec4(v_Color.rgb, 1.0);
+    f_Color = v_Color;
 })";
 
 static Array<ShaderBinding, 1> s_ShaderBindings = {
