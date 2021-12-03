@@ -184,7 +184,8 @@ void LineRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *signa
 
     m_CmdBuffer->Reset();
     m_CmdBuffer->Begin();
-    {
+
+    if(batch.SubmitedIndicesCount && batch.SubmitedVerticesCount){
         m_CmdBuffer->Copy(batch.VerticesBuffer, m_VertexBuffer, batch.SubmitedVerticesCount * sizeof(LineVertex));
         m_CmdBuffer->Copy(batch.IndicesBuffer, m_IndexBuffer, batch.SubmitedIndicesCount * sizeof(u32));
         m_CmdBuffer->SetScissor (m_CurrentViewport.ViewportOffset.x, m_CurrentViewport.ViewportOffset.y, m_CurrentViewport.ViewportSize.x, m_CurrentViewport.ViewportSize.y);
@@ -193,11 +194,12 @@ void LineRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *signa
         m_CmdBuffer->Bind(m_Pipeline);
         m_CmdBuffer->Bind(m_Set);
         m_CmdBuffer->BeginRenderPass(m_FramebufferPass, m_Framebuffer);
-        m_CmdBuffer->BindVertexBuffer(m_VertexBuffer);
-        m_CmdBuffer->BindIndexBuffer(m_IndexBuffer, IndicesType::Uint32);
-        m_CmdBuffer->DrawIndexed(batch.SubmitedIndicesCount);
+            m_CmdBuffer->BindVertexBuffer(m_VertexBuffer);
+            m_CmdBuffer->BindIndexBuffer(m_IndexBuffer, IndicesType::Uint32);
+            m_CmdBuffer->DrawIndexed(batch.SubmitedIndicesCount);
         m_CmdBuffer->EndRenderPass();
     }
+    
     m_CmdBuffer->End();
 
     GPU::Execute(m_CmdBuffer, *wait_semaphore, *signal_semaphore, m_DrawingFence);

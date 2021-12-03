@@ -209,7 +209,8 @@ void CircleRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *sig
 
     m_CmdBuffer->Reset();
     m_CmdBuffer->Begin();
-    {
+
+    if(batch.SubmitedCirclesCount){
         m_CmdBuffer->Copy(batch.VerticesBuffer, m_VertexBuffer, batch.SubmitedCirclesCount * 4 * sizeof(CircleVertex));
         m_CmdBuffer->Copy(batch.IndicesBuffer, m_IndexBuffer, batch.SubmitedCirclesCount * 6 * sizeof(u32));
         m_CmdBuffer->SetScissor (m_CurrentViewport.ViewportOffset.x, m_CurrentViewport.ViewportOffset.y, m_CurrentViewport.ViewportSize.x, m_CurrentViewport.ViewportSize.y);
@@ -217,11 +218,12 @@ void CircleRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *sig
         m_CmdBuffer->Bind(m_Pipeline);
         m_CmdBuffer->Bind(m_Set);
         m_CmdBuffer->BeginRenderPass(m_FramebufferPass, m_Framebuffer);
-        m_CmdBuffer->BindVertexBuffer(m_VertexBuffer);
-        m_CmdBuffer->BindIndexBuffer(m_IndexBuffer, IndicesType::Uint32);
-        m_CmdBuffer->DrawIndexed(batch.SubmitedCirclesCount * 6);
+            m_CmdBuffer->BindVertexBuffer(m_VertexBuffer);
+            m_CmdBuffer->BindIndexBuffer(m_IndexBuffer, IndicesType::Uint32);
+            m_CmdBuffer->DrawIndexed(batch.SubmitedCirclesCount * 6);
         m_CmdBuffer->EndRenderPass();
     }
+
     m_CmdBuffer->End();
 
     GPU::Execute(m_CmdBuffer, *wait_semaphore, *signal_semaphore, m_DrawingFence);
