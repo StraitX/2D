@@ -41,7 +41,7 @@ static Array<ShaderBinding, 1> s_ShaderBindings = {
 
 static Array<VertexAttribute, 2> s_VertexAttributes = {
         VertexAttribute::Float32x2,
-        VertexAttribute::Float32x3
+        VertexAttribute::UNorm8x4
 };
 
 LineRenderer::Batch::Batch(){
@@ -160,7 +160,7 @@ void LineRenderer::DrawLines(ConstSpan<Vector2s> points, Color color, u32 width)
     for(const Vector2s &point: points){
         LineVertex vertex;
         vertex.a_Position = (Vector2f(point) - offset) * m_CurrentViewport.Scale;
-        vertex.a_Color = Vector3f(color.R, color.G, color.B);
+        vertex.a_Color = color.RGBA8();
 
         batch.Vertices[batch.SubmitedVerticesCount] = vertex;
         batch.Indices[batch.SubmitedIndicesCount] = (u32)batch.SubmitedVerticesCount;
@@ -199,7 +199,7 @@ void LineRenderer::Flush(const Semaphore *wait_semaphore, const Semaphore *signa
             m_CmdBuffer->DrawIndexed(batch.SubmitedIndicesCount);
         m_CmdBuffer->EndRenderPass();
     }
-    
+
     m_CmdBuffer->End();
 
     GPU::Execute(m_CmdBuffer, *wait_semaphore, *signal_semaphore, m_DrawingFence);

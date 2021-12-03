@@ -33,7 +33,7 @@ public:
     struct RectVertex{
         Vector2f a_Position;
         Vector2f a_TexCoords;
-        Vector3f a_Color;
+        u32      a_Color;
         float    a_TexIndex;
     };
 

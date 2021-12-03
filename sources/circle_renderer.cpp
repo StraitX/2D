@@ -58,7 +58,7 @@ static Array<ShaderBinding, 1> s_ShaderBindings = {
 static Array<VertexAttribute, 4> s_VertexAttributes = {
         VertexAttribute::Float32x2,
         VertexAttribute::Float32x2,
-        VertexAttribute::Float32x3,
+        VertexAttribute::UNorm8x4,
         VertexAttribute::Float32x1,
 };
 
@@ -184,10 +184,10 @@ void CircleRenderer::DrawCircle(Vector2s center, float radius, Color color){
         vertex -= offset;
     }
 
-    batch.Vertices[base_vertex + 0] = {vertices[0], Vector2f(-radius,-radius), Vector3f(color.R, color.G, color.B), radius};
-    batch.Vertices[base_vertex + 1] = {vertices[1], Vector2f( radius,-radius), Vector3f(color.R, color.G, color.B), radius};
-    batch.Vertices[base_vertex + 2] = {vertices[2], Vector2f( radius, radius), Vector3f(color.R, color.G, color.B), radius};
-    batch.Vertices[base_vertex + 3] = {vertices[3], Vector2f(-radius, radius), Vector3f(color.R, color.G, color.B), radius};
+    batch.Vertices[base_vertex + 0] = {vertices[0], Vector2f(-radius,-radius), color.RGBA8(), radius};
+    batch.Vertices[base_vertex + 1] = {vertices[1], Vector2f( radius,-radius), color.RGBA8(), radius};
+    batch.Vertices[base_vertex + 2] = {vertices[2], Vector2f( radius, radius), color.RGBA8(), radius};
+    batch.Vertices[base_vertex + 3] = {vertices[3], Vector2f(-radius, radius), color.RGBA8(), radius};
 
     batch.Indices[base_index + 0] = batch.SubmitedCirclesCount * 4 + 0;
     batch.Indices[base_index + 1] = batch.SubmitedCirclesCount * 4 + 1;

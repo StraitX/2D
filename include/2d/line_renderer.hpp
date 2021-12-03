@@ -32,7 +32,7 @@ class LineRenderer: public NonCopyable{
 public:
     struct LineVertex{
         Vector2f a_Position;
-        Vector3f a_Color;
+        u32      a_Color;
     };
     static constexpr size_t MaxVerticesInBatch = 20000 * 4;
     static constexpr size_t MaxIndicesInBatch  = 20000 * 6;
