@@ -8,44 +8,13 @@
 #include "graphics/api/framebuffer.hpp"
 #include "graphics/api/graphics_pipeline.hpp"
 
-static const char *s_VertexShader = R"(
-#version 440 core
+static const char *s_VertexShader = 
+    #include "shaders/rect_renderer.vert.glsl"
+;
 
-layout(location = 0)in vec2 a_Position;
-layout(location = 1)in vec2 a_TexCoords;
-layout(location = 2)in vec4 a_Color;
-layout(location = 3)in float a_TexIndex;
-
-layout(location = 0)out vec4 v_Color;
-layout(location = 1)out vec2 v_TexCoords;
-layout(location = 2)out flat float v_TexIndex;
-
-layout(std140, binding = 0)uniform MatricesUniform{
-    mat4 u_Projection;
-};
-
-void main(){
-    gl_Position = u_Projection * vec4(a_Position.xy, 0.0, 1.0);
-
-    v_Color = a_Color;
-    v_TexCoords = a_TexCoords;
-    v_TexIndex = a_TexIndex;
-})";
-
-static const char *s_FragmentShader = R"(
-#version 440 core
-
-layout(location = 0)in vec4 v_Color;
-layout(location = 1)in vec2 v_TexCoords;
-layout(location = 2)in flat float v_TexIndex;
-
-layout(location = 0)out vec4 f_Color;
-
-layout(binding = 1)uniform sampler2D u_Textures[15];
-
-void main(){
-    f_Color = v_Color * texture(u_Textures[int(v_TexIndex)], v_TexCoords);
-})";
+static const char *s_FragmentShader = 
+    #include "shaders/rect_renderer.frag.glsl"
+;
 
 static Array<ShaderBinding, 2> s_ShaderBindings = {
     ShaderBinding(0, 1,                              ShaderBindingType::UniformBuffer, ShaderStageBits::Vertex),

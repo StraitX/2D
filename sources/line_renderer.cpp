@@ -6,34 +6,13 @@
 #include "graphics/api/framebuffer.hpp"
 #include "graphics/api/graphics_pipeline.hpp"
 
-static const char *s_VertexShader = R"(
-#version 440 core
+static const char *s_VertexShader = 
+    #include "shaders/line_renderer.vert.glsl"
+;
 
-layout(location = 0)in vec2 a_Position;
-layout(location = 1)in vec4 a_Color;
-
-layout(location = 0)out vec4 v_Color;
-
-layout(std140, binding = 0)uniform MatricesUniform{
-    mat4 u_Projection;
-};
-
-void main(){
-    gl_Position = u_Projection * vec4(a_Position.xy, 0.0, 1.0);
-
-    v_Color = a_Color;
-})";
-
-static const char *s_FragmentShader = R"(
-#version 440 core
-
-layout(location = 0)in vec4 v_Color;
-
-layout(location = 0)out vec4 f_Color;
-
-void main(){
-    f_Color = v_Color;
-})";
+static const char *s_FragmentShader = 
+    #include "shaders/line_renderer.frag.glsl"
+;
 
 static Array<ShaderBinding, 1> s_ShaderBindings = {
         ShaderBinding(0, 1,                              ShaderBindingType::UniformBuffer, ShaderStageBits::Vertex)
