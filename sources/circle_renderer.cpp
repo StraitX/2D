@@ -1,6 +1,6 @@
 #include "2d/circle_renderer.hpp"
 #include "core/string.hpp"
-#include "core/math/trig.hpp"
+#include "core/math/functions.hpp"
 #include "core/math/linear.hpp"
 #include "graphics/api/command_buffer.hpp"
 #include "graphics/api/gpu.hpp"
