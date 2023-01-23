@@ -4,22 +4,19 @@
 #include "core/math/vector2.hpp"
 #include "core/math/vector3.hpp"
 #include "core/math/matrix4.hpp"
-#include "core/result.hpp"
+#include "core/unique_ptr.hpp"
 #include "core/array.hpp"
 #include "core/fixed_list.hpp"
 #include "core/noncopyable.hpp"
-#include "core/raw_var.hpp"
-#include "core/ring.hpp"
 #include "graphics/color.hpp"
 #include "graphics/api/semaphore.hpp"
 #include "graphics/api/fence.hpp"
 #include "graphics/api/descriptor_set.hpp"
-
-#include "2d/common/semaphore_ring.hpp"
+#include "graphics/api/framebuffer.hpp"
+#include "graphics/api/graphics_pipeline.hpp"
 #include "2d/common/viewport_parameters.hpp"
 
 class RenderPass;
-class Framebuffer;
 class Shader;
 class GraphicsPipeline;
 class CommandPool;
@@ -29,7 +26,8 @@ class Buffer;
 class Texture2D;
 
 class RectRenderer: public NonCopyable{
-public:
+    static const Array<Vector2f, 4> s_DefaultTextureCoordinates;
+
     struct RectVertex{
         Vector2f a_Position;
         Vector2f a_TexCoords;
@@ -37,109 +35,83 @@ public:
         float    a_TexIndex;
     };
 
-    static constexpr size_t MaxRectsInBatch    = 60000;
-    static constexpr size_t MaxVerticesInBatch = MaxRectsInBatch * 4;
-    static constexpr size_t MaxIndicesInBatch  = MaxRectsInBatch * 6;
-    static constexpr size_t MaxTexturesInSet   = MaxTexturesBindings;
-private:
     struct MatricesUniform{
         Matrix4f u_Projection{1.0f};
     };
 
-    struct Batch{
-        Buffer *VerticesBuffer = nullptr;
-        Buffer *IndicesBuffer  = nullptr;
-        RectVertex *Vertices = nullptr;
-        u32        *Indices  = nullptr;
-        size_t      SubmitedRectsCount = 0;
-        FixedList<Texture2D *, MaxTexturesInSet> Textures;
 
-        Batch();
+    struct Batch {
+        static constexpr size_t MaxTexturesInBatch = 15;
 
-        ~Batch();
+        FixedList<const Texture2D*, MaxTexturesInBatch> Textures;
+        UniquePtr<RectVertex[]> Vertices;
+        UniquePtr<u16[]> Indices;
+        UniquePtr<Buffer> VertexBuffer;
+        UniquePtr<Buffer> IndexBuffer;
+        size_t SubmitedPrimitives = 0;
 
-        void Reset();
+        Batch(u16 max_primitives_count);
 
-        bool IsGeometryFull()const{
-            return SubmitedRectsCount == MaxRectsInBatch;
-        }
+        Batch(Batch&&)noexcept = default;
+        
+        bool IsFull()const;
 
-        bool IsTexturesFull()const{
-            return Textures.Size() == Textures.Capacity();
-        }
+        void PushRect(Vector2f position, Vector2f size, Vector2f origin, float angle, Color color, Texture2D* texture, const Array<Vector2f, 4>& texture_coords = s_DefaultTextureCoordinates);
 
-        bool HasTexture(Texture2D *texture){
-            return Textures.Find(texture) != Textures.end();
+        u16 MaxPrimitivesCount()const;
+
+        void Reset() {
+            SubmitedPrimitives = 0;
+            Textures.Clear();
         }
     };
 
-public:
-    static const Array<Vector2f, 4> s_DefaultTextureCoordinates;
 private:
 
-    //XXX: do something about allocation
     const RenderPass *m_FramebufferPass = nullptr;
-    const Framebuffer *m_Framebuffer = nullptr;
-    const DescriptorSetLayout *m_SetLayout = nullptr;
-    DescriptorSetPool         *m_SetPool   = nullptr;
-    DescriptorSet             *m_Set       = nullptr;
+    UniquePtr<DescriptorSetLayout> m_SetLayout;
 
-    Array<const Shader *, 2> m_Shaders = {nullptr, nullptr};
-    GraphicsPipeline *m_Pipeline       = nullptr;
+    static constexpr size_t MaxSets = 16;
+    static constexpr size_t PreallocatedSets = 1;
+    SingleFrameDescriptorSetPool m_SetPool{ {MaxSets, m_SetLayout.Get()}, PreallocatedSets };
 
-    CommandPool   *m_CmdPool   = nullptr;
-    CommandBuffer *m_CmdBuffer = nullptr;
+    UniquePtr<GraphicsPipeline> m_Pipeline;
+    StructBuffer<MatricesUniform> m_MatricesUniformBuffer;
 
-    Ring<Batch, 2> m_BatcheRings;
+    UniquePtr<Sampler> m_DefaultSampler{
+        Sampler::Create({})
+    };
 
-    SemaphoreRing m_SemaphoreRing;
-    
-    MatricesUniform    m_MatricesUniform;
-    ViewportParameters m_CurrentViewport;
-
-    Fence m_DrawingFence;
-
-    Buffer *m_VertexBuffer = nullptr;
-    Buffer *m_IndexBuffer  = nullptr;
-    Buffer *m_MatricesUniformBuffer = nullptr;
-
-    Texture2D *m_WhiteTexture   = nullptr;
-    Sampler   *m_DefaultSampler = nullptr;
-    
+    List<Batch> m_Batches;
 public:
     RectRenderer(const RenderPass *rp);
 
-    ~RectRenderer();
+    void DrawRect(Vector2f position, Vector2f size, Vector2f origin, float angle, Color color, Texture2D *texture, const Array<Vector2f, 4> &texture_coords = s_DefaultTextureCoordinates);
 
-    Result BeginDrawing(const Semaphore *wait_semaphore, const Framebuffer *framebuffer, const ViewportParameters &viewport);
-
-    Result BeginDrawing(const Semaphore *wait_semaphore, const Framebuffer *framebuffer);
-
-    void EndDrawing(const Semaphore *signal_semaphore);
-
-    void DrawRect(Vector2s position, Vector2s size, Vector2s origin, float angle, Color color, Texture2D *texture, const Array<Vector2f, 4> &texture_coords = s_DefaultTextureCoordinates);
-
-    void DrawRect(Vector2s position, Vector2s size, Vector2s origin, float angle, Color color){
-        DrawRect(position, size, origin, angle, color, m_WhiteTexture);
+    void DrawRect(Vector2f position, Vector2f size, Vector2f origin, float angle, Color color){
+        DrawRect(position, size, origin, angle, color, Texture2D::White());
     }
 
-    void DrawRect(Vector2s position, Vector2s size, float angle, Color color){
-        DrawRect(position, size, size/2, angle, color, m_WhiteTexture);
+    void DrawRect(Vector2f position, Vector2f size, float angle, Color color){
+        DrawRect(position, size, size/2.f, angle, color, Texture2D::White());
     }
 
-    void DrawRect(Vector2s position, Vector2s size, Color color, Texture2D *texture){
-        DrawRect(position, size, {0, 0}, 0, color, texture);
+    void DrawRect(Vector2f position, Vector2f size, Color color, Texture2D *texture){
+        DrawRect(position, size, {0.f, 0.f}, 0, color, texture);
     }
 
-    void DrawRect(Vector2s position, Vector2s size, Color color){
-        DrawRect(position, size, {0, 0}, 0, color, m_WhiteTexture);
+    void DrawRect(Vector2f position, Vector2f size, Color color){
+        DrawRect(position, size, {0.f, 0.f}, 0, color, Texture2D::White());
     }
 
-    void Flush();
-private:
-    void Flush(const Semaphore *wait_semaphore, const Semaphore *signal_semaphore);
+    void CmdRender(CommandBuffer *cmd_buffer, const Framebuffer *fb, const ViewportParameters &viewport);
 
-    static void Rotate(Span<Vector2f> vertices, float degrees);
+    void CmdRender(CommandBuffer* cmd_buffer, const Framebuffer* fb) {
+        ViewportParameters default_parameters;
+        default_parameters.ViewportOffset = {0.f, 0.f};
+        default_parameters.ViewportSize = Vector2f(fb->Size());
+        CmdRender(cmd_buffer, fb, default_parameters);
+    }
 };
 
 #endif//STRAITX-2D_RECT_RENDERER_HPP
