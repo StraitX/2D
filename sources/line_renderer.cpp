@@ -50,8 +50,8 @@ LineRenderer::LineRenderer(const RenderPass *rp){
     m_SetPool = DescriptorSetPool::Create({1, m_SetLayout});
     m_Set = m_SetPool->Alloc();
 
-    m_Shaders[0] = Shader::Create(ShaderLang::GLSL, ShaderStageBits::Vertex,   {s_VertexShader,   String::Length(s_VertexShader)  } );
-    m_Shaders[1] = Shader::Create(ShaderLang::GLSL, ShaderStageBits::Fragment, {s_FragmentShader, String::Length(s_FragmentShader)} );
+    m_Shaders[0] = Shader::Create(ShaderStageBits::Vertex,   {s_VertexShader,   String::Length(s_VertexShader)  } );
+    m_Shaders[1] = Shader::Create(ShaderStageBits::Fragment, {s_FragmentShader, String::Length(s_FragmentShader)} );
 
     {
         GraphicsPipelineProperties props;
